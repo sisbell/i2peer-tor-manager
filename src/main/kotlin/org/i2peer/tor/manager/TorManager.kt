@@ -10,26 +10,25 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 data class Bootstrap(val percentage: Double)
-data class EventError(val message: String, val e: Throwable? = null)
-data class EventMessage(val text: String)
+data class StartError(val message: String, val e: Throwable? = null)
 data class StartOk(val message: String, val torProcess: Process)
-data class StartProcessMessage(val message: String)
+data class StartMessage(val message: String)
 data class TorStartData(val torDir: File, val torSettings: TorSettings, val event: SendChannel<Any>)
 
 @ObsoleteCoroutinesApi
-suspend fun startTor(installDir: File, torSettings: TorSettings, event: SendChannel<Any>) =
-    torConfigWriter().send(TorStartData(installDir, torSettings, event))
+suspend fun startTor(torSettings: TorSettings, event: SendChannel<Any>) =
+    torConfigWriter().send(TorStartData(torSettings.torDir, torSettings, event))
 
 @ObsoleteCoroutinesApi
 private fun torConfigWriter() = GlobalScope.actor<TorStartData> {
     val data = channel.receive()
-    data.event.send(EventMessage("TorConfigWriter"))
+    data.event.send(StartMessage("TorConfigWriter"))
     val builder = TorConfigBuilder(data.torSettings)
     builder.writeConfig(data.torSettings.customTorrc).fold(
         {
-            data.event.send(EventError("Failed to write config files", it))
+            data.event.send(StartError("Failed to write config files", it))
         }, {
-            data.event.send(EventMessage("Wrote config file ${data.torSettings.customTorrc}"))
+            data.event.send(StartMessage("Wrote config file ${data.torSettings.customTorrc}"))
             torStarter().send(data)
         })
     channel.cancel()
@@ -40,12 +39,12 @@ private fun torStarter() = GlobalScope.actor<TorStartData> {
     val data = channel.receive()
     val event = data.event
 
-    event.send(EventMessage("Starter: ${data.torSettings.customTorrc}"))
+    event.send(StartMessage("Starter: ${data.torSettings.customTorrc}"))
 
     val processBuilder = ProcessBuilder(runTorArgs(File(data.torDir, "tor"), data.torSettings.customTorrc))
     val environment = processBuilder.environment()
     environment["LD_LIBRARY_PATH"] = data.torDir.absolutePath
-    event.send(StartProcessMessage("Starting tor with the following commands: ${processBuilder.command()}"))
+    event.send(StartMessage("Starting tor with the following commands: ${processBuilder.command()}"))
     val process = processBuilder.start()
 
     process.waitFor(5000, TimeUnit.MILLISECONDS)
@@ -53,7 +52,7 @@ private fun torStarter() = GlobalScope.actor<TorStartData> {
         val baos = ByteArrayOutputStream()
         process.errorStream.copyTo(baos)
         println("ERROR:$baos")
-        event.send(EventError("Tor targetProcess failed to start: ${processBuilder.command()}"))
+        event.send(StartError("Tor targetProcess failed to start: ${processBuilder.command()}"))
         return@actor
     }
 
@@ -72,14 +71,14 @@ private fun torStarter() = GlobalScope.actor<TorStartData> {
             }
             it.contains("[err]") -> {
                 runBlocking {
-                    event.send(EventError("Tor targetProcess failed to start: $it"))
+                    event.send(StartError("Tor targetProcess failed to start: $it"))
                 }
                 process.destroy()
             }
         }
         System.out.println(it)
         runBlocking {
-            event.send(StartProcessMessage(it))
+            event.send(StartMessage(it))
         }
     }
 }
