@@ -1,0 +1,101 @@
+buildscript {
+    ext.kotlin_version = '1.3.21'
+    ext.arrow_version='0.8.2'
+    repositories {
+        jcenter()
+        maven { url "https://kotlin.bintray.com/kotlinx" }
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "org.jetbrains.kotlin:kotlin-serialization:$kotlin_version"
+    }
+}
+
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.3.21'
+    id 'java'
+    id 'maven-publish'
+    id 'signing'
+}
+
+group 'org.i2peer.tor'
+version "1.0"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    api 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.1.1'
+    api "io.arrow-kt:arrow-instances-core:$arrow_version"
+}
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
+compileTestKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
+
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    archiveClassifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    archiveClassifier = 'javadoc'
+}
+
+publishing {
+    publications {
+        torInstaller(MavenPublication) {
+            artifactId = 'tor-manager'
+            from components.java
+            artifact sourcesJar
+            artifact javadocJar
+            pom {
+                name = 'i2Peer Tor Manager'
+                description = 'Manages Tor Runtime and Configuration'
+                url = 'https://github.com/sisbell/i2peer-tor-manager'
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'sisbell'
+                        name = 'Shane Isbell'
+                        email = 'shane.isbell@gmail.com'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git@github.com:sisbell/i2peer-tor-manager.git'
+                    developerConnection = 'scm:git:git@github.com:sisbell/i2peer-tor-manager.git'
+                    url = 'https://github.com/sisbell/i2peer-tor-manager'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+            credentials {
+                username project.username
+                password project.password
+            }
+        }
+    }
+}
+
+if (project.hasProperty("signing.keyId")) {
+    signing {
+        sign publishing.publications.torInstaller
+    }
+}
+
